@@ -1,8 +1,8 @@
 __author__ = 'utkarsh'
-__co-author__ = 'chatGPT'
+# __co-author__ = 'chatGPT'
 
 import threading
-import SocketServer
+import socketserver  # Updated for Python 3
 import serial
 import cv2
 import numpy as np
@@ -11,15 +11,14 @@ import math
 # distance data measured by ultrasonic sensor
 sensor_data = " "
 
-
 class NeuralNetwork(object):
 
     def __init__(self):
-        self.model = cv2.ANN_MLP()
+        self.model = cv2.ml.ANN_MLP_create()
 
     def create(self):
-        layer_size = np.int32([38400, 32, 4])
-        self.model.create(layer_size)
+        layer_size = np.array([38400, 32, 4], dtype=np.int32)
+        self.model.setLayerSizes(layer_size)
         self.model.load('mlp_xml/mlp.xml')
 
     def predict(self, samples):
@@ -34,19 +33,19 @@ class RCControl(object):
 
     def steer(self, prediction):
         if prediction == 2:
-            self.serial_port.write(chr(1))
+            self.serial_port.write(bytes([1]))
             print("Forward")
         elif prediction == 0:
-            self.serial_port.write(chr(7))
+            self.serial_port.write(bytes([7]))
             print("Left")
         elif prediction == 1:
-            self.serial_port.write(chr(6))
+            self.serial_port.write(bytes([6]))
             print("Right")
         else:
             self.stop()
 
     def stop(self):
-        self.serial_port.write(chr(0))
+        self.serial_port.write(bytes([0]))
 
 
 class DistanceToCamera(object):
@@ -62,7 +61,7 @@ class DistanceToCamera(object):
         d = h / math.tan(self.alpha + math.atan((v - self.v0) / self.ay))
         if d > 0:
             cv2.putText(image, "%.1fcm" % d,
-                (image.shape[1] - x_shift, image.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        (image.shape[1] - x_shift, image.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         return d
 
 
@@ -84,7 +83,7 @@ class ObjectDetection(object):
             scaleFactor=1.1,
             minNeighbors=5,
             minSize=(30, 30),
-            flags=cv2.cv.CV_HAAR_SCALE_IMAGE
+            flags=cv2.CASCADE_SCALE_IMAGE
         )
 
         # draw a rectangle around the objects
@@ -121,7 +120,7 @@ class ObjectDetection(object):
         return v
 
 
-class SensorDataHandler(SocketServer.BaseRequestHandler):
+class SensorDataHandler(socketserver.BaseRequestHandler):
 
     data = " "
 
@@ -129,15 +128,15 @@ class SensorDataHandler(SocketServer.BaseRequestHandler):
         global sensor_data
         try:
             while self.data:
-                self.data = self.request.recv(1024)
+                self.data = self.request.recv(1024).decode()
                 sensor_data = round(float(self.data), 1)
                 #print "{} sent:".format(self.client_address[0])
-                print sensor_data
+                print(sensor_data)
         finally:
-            print "Connection closed on thread 2"
+            print("Connection closed on thread 2")
 
 
-class VideoStreamHandler(SocketServer.StreamRequestHandler):
+class VideoStreamHandler(socketserver.StreamRequestHandler):
 
     # h1: stop sign
     h1 = 15.5 - 10  # cm
@@ -167,7 +166,7 @@ class VideoStreamHandler(SocketServer.StreamRequestHandler):
     def handle(self):
 
         global sensor_data
-        stream_bytes = ' '
+        stream_bytes = b''
         stop_flag = False
         stop_sign_active = True
 
@@ -175,13 +174,13 @@ class VideoStreamHandler(SocketServer.StreamRequestHandler):
         try:
             while True:
                 stream_bytes += self.rfile.read(1024)
-                first = stream_bytes.find('\xff\xd8')
-                last = stream_bytes.find('\xff\xd9')
+                first = stream_bytes.find(b'\xff\xd8')
+                last = stream_bytes.find(b'\xff\xd9')
                 if first != -1 and last != -1:
                     jpg = stream_bytes[first:last+2]
                     stream_bytes = stream_bytes[last+2:]
-                    gray = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), cv2.CV_LOAD_IMAGE_GRAYSCALE)
-                    image = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), cv2.CV_LOAD_IMAGE_UNCHANGED)
+                    gray = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+                    image = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
 
                     # lower half of the image
                     half_gray = gray[120:240, :]
@@ -222,7 +221,7 @@ class VideoStreamHandler(SocketServer.StreamRequestHandler):
                         self.stop_finish = cv2.getTickCount()
 
                         self.stop_time = (self.stop_finish - self.stop_start)/cv2.getTickFrequency()
-                        print "Stop time: %.2fs" % self.stop_time
+                        print("Stop time: %.2fs" % self.stop_time)
 
                         # 5 seconds later, continue driving
                         if self.stop_time > 5:
@@ -264,22 +263,24 @@ class VideoStreamHandler(SocketServer.StreamRequestHandler):
             cv2.destroyAllWindows()
 
         finally:
-            print "Connection closed on thread 1"
+            print("Connection closed on thread 1")
 
 
 class ThreadServer(object):
 
+    @staticmethod
     def server_thread(host, port):
-        server = SocketServer.TCPServer((host, port), VideoStreamHandler)
+        server = socketserver.TCPServer((host, port), VideoStreamHandler)
         server.serve_forever()
 
+    @staticmethod
     def server_thread2(host, port):
-        server = SocketServer.TCPServer((host, port), SensorDataHandler)
+        server = socketserver.TCPServer((host, port), SensorDataHandler)
         server.serve_forever()
 
     distance_thread = threading.Thread(target=server_thread2, args=('192.168.1.100', 8002))
     distance_thread.start()
-    video_thread = threading.Thread(target=server_thread('192.168.1.100', 8000))
+    video_thread = threading.Thread(target=server_thread, args=('192.168.1.100', 8000))
     video_thread.start()
 
 if __name__ == '__main__':

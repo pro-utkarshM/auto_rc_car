@@ -1,5 +1,5 @@
 __author__ = 'utkarsh'
-__co-author__ = 'chatGPT'
+# __co-author__ = 'chatGPT'
 
 """
 Reference:
@@ -48,14 +48,14 @@ for file_name in images:
 # calibration
 retval, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.calibrateCamera(object_points, image_points, (w, h), None, None)
 
-print "camera matrix:\n", cameraMatrix
+print("camera matrix:\n", cameraMatrix)
 
 # pi camera intrinsic parameters
 ay = cameraMatrix[1, 1]
 u0 = cameraMatrix[0, 2]
 v0 = cameraMatrix[1, 2]
-print "Ay:", ay
-print "u0:", u0
-print "v0:", v0
+print("Ay:", ay)
+print("u0:", u0)
+print("v0:", v0)
 
 cv2.destroyAllWindows()
